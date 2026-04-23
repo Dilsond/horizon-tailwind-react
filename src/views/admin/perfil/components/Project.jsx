@@ -12,8 +12,9 @@ const Project = () => {
         <h4 className="text-xl font-bold text-navy-700 dark:text-white">
           Produtos Divulgados
         </h4>
-        
+
       </div>
+
       {/* Project 1 */}
       <div className="flex w-full items-center justify-between rounded-2xl bg-white p-3 shadow-3xl shadow-shadow-500 dark:!bg-navy-700 dark:shadow-none">
         <div className="flex items-center">
@@ -25,7 +26,7 @@ const Project = () => {
               Technology behind the Blockchain
             </p>
             <p className="mt-2 text-sm text-gray-600">
-              weitrcyvgulbhçkj rsxdgj fhb 
+              weitrcyvgulbhçkj rsxdgj fhb
             </p>
             <p className="mt-2 text-sm text-gray-600">
               254,447kzs
@@ -33,6 +34,7 @@ const Project = () => {
           </div>
         </div>
       </div>
+
       {/* Project 1 */}
       <div className="mt-3 flex w-full items-center justify-between rounded-2xl bg-white p-3 shadow-3xl shadow-shadow-500 dark:!bg-navy-700 dark:shadow-none">
         <div className="flex items-center">
@@ -44,7 +46,7 @@ const Project = () => {
               Technology behind the Blockchain
             </p>
             <p className="mt-2 text-sm text-gray-600">
-              weitrcyvgulbhçkj rsxdgj fhb 
+              weitrcyvgulbhçkj rsxdgj fhb
             </p>
             <p className="mt-2 text-sm text-gray-600">
               254,447kzs
@@ -52,6 +54,7 @@ const Project = () => {
           </div>
         </div>
       </div>
+      
       {/* Project 1 */}
       <div className="mt-3 mb-3 flex w-full items-center justify-between rounded-2xl bg-white p-3 shadow-3xl shadow-shadow-500 dark:!bg-navy-700 dark:shadow-none">
         <div className="flex items-center">
@@ -63,7 +66,7 @@ const Project = () => {
               Technology behind the Blockchain
             </p>
             <p className="mt-2 text-sm text-gray-600">
-              weitrcyvgulbhçkj rsxdgj fhb 
+              weitrcyvgulbhçkj rsxdgj fhb
             </p>
             <p className="mt-2 text-sm text-gray-600">
               254,447kzs
@@ -82,7 +85,7 @@ const Project = () => {
               Technology behind the Blockchain
             </p>
             <p className="mt-2 text-sm text-gray-600">
-              weitrcyvgulbhçkj rsxdgj fhb 
+              weitrcyvgulbhçkj rsxdgj fhb
             </p>
             <p className="mt-2 text-sm text-gray-600">
               254,447kzs
@@ -102,7 +105,7 @@ const Project = () => {
               Technology behind the Blockchain
             </p>
             <p className="mt-2 text-sm text-gray-600">
-              weitrcyvgulbhçkj rsxdgj fhb 
+              weitrcyvgulbhçkj rsxdgj fhb
             </p>
             <p className="mt-2 text-sm text-gray-600">
               254,447kzs

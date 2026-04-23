@@ -1,18 +1,22 @@
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-
-import RtlLayout from "layouts/rtl";
 import AdminLayout from "layouts/admin";
-import AuthLayout from "layouts/auth";
+import Auth from "layouts/auth"; // ou o caminho correto do seu Auth
 
 const App = () => {
+  const isAuthenticated = !!localStorage.getItem("admin");
+
   return (
     <Routes>
-      <Route path="auth/*" element={<AuthLayout />} />
-      <Route path="admin/*" element={<AdminLayout />} />
-      <Route path="admin/perfil" element={<Navigate to="/src/views/admin/perfil" />} />
-      <Route path="rtl/*" element={<RtlLayout />} />
-      <Route path="/" element={<Navigate to="/admin" replace />} />
+      <Route path="auth/*" element={<Auth />} />
+      <Route 
+        path="admin/*" 
+        element={isAuthenticated ? <AdminLayout /> : <Navigate to="/auth" replace />} 
+      />
+      <Route 
+        path="/" 
+        element={<Navigate to={isAuthenticated ? "/admin/default" : "/auth"} replace />} 
+      />
     </Routes>
   );
 };

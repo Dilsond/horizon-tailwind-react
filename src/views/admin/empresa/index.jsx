@@ -1,114 +1,225 @@
-import React, { useState } from 'react';
-import { FaCheck, FaTimes, FaEdit, FaTrash, FaChartLine } from 'react-icons/fa';
-import Card from 'components/card'; // Componente de card personalizado
+import React, { useState, useEffect } from 'react';
+import { FaCheck, FaTimes, FaEye, FaEdit, FaBuilding } from 'react-icons/fa';
+import Card from 'components/card';
 import {
     createColumnHelper,
     flexRender,
     getCoreRowModel,
     useReactTable,
 } from '@tanstack/react-table';
+import { supabase } from '../../../lib/supabase.ts';
+import { useNavigate } from 'react-router-dom';
 
 const GerenciamentoEmpresas = () => {
-    // Dados de exemplo para empresas cadastradas
-    const [empresas, setEmpresas] = useState([
-        { id: 1, nome: 'Empresa A', cnpj: '12.345.678/0001-99', status: 'Ativa' },
-        { id: 2, nome: 'Empresa B', cnpj: '98.765.432/0001-11', status: 'Pendente' },
-        { id: 3, nome: 'Empresa C', cnpj: '11.223.344/0001-55', status: 'Suspensa' },
-    ]);
+    const [empresas, setEmpresas] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [editingStatus, setEditingStatus] = useState(null);
+    const [newStatus, setNewStatus] = useState('');
+    const navigate = useNavigate();
 
-    // Estado para gerenciar a edição de dados
-    const [editingEmpresa, setEditingEmpresa] = useState(null);
+    useEffect(() => {
+        fetchEmpresas();
+    }, []);
 
-    // Função para aprovar ou rejeitar cadastro
-    const handleAprovarRejeitar = (id, acao) => {
-        setEmpresas((prev) =>
-            prev.map((empresa) =>
-                empresa.id === id ? { ...empresa, status: acao } : empresa
-            )
-        );
-        alert(`Cadastro da empresa ${id} ${acao === 'Ativa' ? 'aprovado' : 'rejeitado'}.`);
+    const fetchEmpresas = async () => {
+        try {
+            setLoading(true);
+            
+            const { data, error } = await supabase
+                .from('organizadores')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            setEmpresas(data || []);
+        } catch (err) {
+            console.error('Erro ao buscar empresas:', err);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    // Função para suspender, ativar ou excluir conta
-    const handleStatusConta = (id, acao) => {
-        setEmpresas((prev) =>
-            prev.map((empresa) =>
-                empresa.id === id ? { ...empresa, status: acao } : empresa
-            )
-        );
-        alert(`Conta da empresa ${id} ${acao}.`);
+    const atualizarStatus = async (id, novoStatus) => {
+        try {
+            const updateData = {};
+
+            if (novoStatus === 'ativo') {
+                updateData.deleted_at = null;
+            } else {
+                updateData.deleted_at = new Date().toISOString();
+            }
+
+            const { error } = await supabase
+                .from('organizadores')
+                .update(updateData)
+                .eq('id', id);
+
+            if (error) throw error;
+
+            // Atualizar estado local
+            setEmpresas(empresas.map(emp =>
+                emp.id === id
+                    ? { ...emp, ...updateData }
+                    : emp
+            ));
+
+            setEditingStatus(null);
+        } catch (err) {
+            console.error('Erro ao atualizar status:', err);
+        }
     };
 
-    // Função para editar dados cadastrais
-    const handleEditar = (id) => {
-        const empresa = empresas.find((emp) => emp.id === id);
-        setEditingEmpresa(empresa);
+    const iniciarEdicaoStatus = (empresa) => {
+        setEditingStatus(empresa.id);
+        setNewStatus(empresa.deleted_at ? 'suspenso' : 'ativo');
     };
 
-    // Função para salvar edição
-    const handleSalvarEdicao = () => {
-        setEmpresas((prev) =>
-            prev.map((empresa) =>
-                empresa.id === editingEmpresa.id ? editingEmpresa : empresa
-            )
-        );
-        setEditingEmpresa(null);
-        alert('Dados da empresa atualizados com sucesso.');
+    const cancelarEdicao = () => {
+        setEditingStatus(null);
+        setNewStatus('');
+    };
+
+    const salvarStatus = (id) => {
+        atualizarStatus(id, newStatus);
+    };
+
+    const handleVisualizar = (id) => {
+        navigate(`/admin/perfilempresa/${id}`);
+    };
+
+    const getStatusInfo = (empresa) => {
+        const isActive = !empresa.deleted_at;
+        return {
+            status: isActive ? 'ativo' : 'suspenso',
+            label: isActive ? 'Ativa' : 'Suspensa',
+            color: isActive
+                ? 'bg-green-100 text-green-800 border-green-200'
+                : 'bg-red-100 text-red-800 border-red-200',
+            badgeColor: isActive ? 'bg-green-500' : 'bg-red-500'
+        };
+    };
+
+    const formatDate = (dateStr) => {
+        if (!dateStr) return '-';
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('pt-PT');
     };
 
     // Configuração da tabela
     const columnHelper = createColumnHelper();
     const columns = [
-        columnHelper.accessor('nome', {
-            header: () => <p className="text-sm font-bold text-gray-600 dark:text-white">NOME</p>,
-            cell: (info) => <p className="text-sm font-bold text-navy-700 dark:text-white">{info.getValue()}</p>,
+        columnHelper.accessor('nome_empresa', {
+            header: () => <p className="text-sm font-bold text-gray-600 dark:text-white">NOME DA EMPRESA</p>,
+            cell: (info) => (
+                <p className="text-sm font-bold text-navy-700 dark:text-white">
+                    {info.getValue() || 'Não informado'}
+                </p>
+            ),
         }),
-        columnHelper.accessor('cnpj', {
-            header: () => <p className="text-sm font-bold text-gray-600 dark:text-white">CNPJ</p>,
-            cell: (info) => <p className="text-sm font-bold text-navy-700 dark:text-white">{info.getValue()}</p>,
+        columnHelper.accessor('nif', {
+            header: () => <p className="text-sm font-bold text-gray-600 dark:text-white">NIF</p>,
+            cell: (info) => (
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                    {info.getValue() || '-'}
+                </p>
+            ),
+        }),
+        columnHelper.accessor('email_empresa', {
+            header: () => <p className="text-sm font-bold text-gray-600 dark:text-white">EMAIL</p>,
+            cell: (info) => (
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                    {info.getValue() || '-'}
+                </p>
+            ),
+        }),
+        columnHelper.accessor('contacto', {
+            header: () => <p className="text-sm font-bold text-gray-600 dark:text-white">CONTACTO</p>,
+            cell: (info) => (
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                    {info.getValue() || '-'}
+                </p>
+            ),
         }),
         columnHelper.accessor('status', {
             header: () => <p className="text-sm font-bold text-gray-600 dark:text-white">STATUS</p>,
-            cell: (info) => <p className="text-sm font-bold text-navy-700 dark:text-white">{info.getValue()}</p>,
-        }),
-        columnHelper.accessor('acao', {
-            header: () => <p className="text-sm font-bold text-gray-600 dark:text-white">AÇÃO</p>,
-            cell: (info) => (
-                <div className="flex space-x-4">
-                    {info.row.original.status === 'Pendente' && (
-                        <>
+            cell: (info) => {
+                const empresa = info.row.original;
+                const statusInfo = getStatusInfo(empresa);
+
+                if (editingStatus === empresa.id) {
+                    return (
+                        <div className="flex items-center space-x-2">
+                            <select
+                                value={newStatus}
+                                onChange={(e) => setNewStatus(e.target.value)}
+                                className="px-2 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                            >
+                                <option value="ativo">Ativa</option>
+                                <option value="suspenso">Suspensa</option>
+                            </select>
                             <button
-                                className="text-green-500 hover:text-green-700"
-                                title="Aprovar"
-                                onClick={() => handleAprovarRejeitar(info.row.original.id, 'Ativa')}
+                                onClick={() => salvarStatus(empresa.id)}
+                                className="text-green-600 hover:text-green-700"
+                                title="Salvar"
                             >
                                 <FaCheck />
                             </button>
                             <button
-                                className="text-red-500 hover:text-red-700"
-                                title="Rejeitar"
-                                onClick={() => handleAprovarRejeitar(info.row.original.id, 'Rejeitada')}
+                                onClick={cancelarEdicao}
+                                className="text-red-600 hover:text-red-700"
+                                title="Cancelar"
                             >
                                 <FaTimes />
                             </button>
-                        </>
-                    )}
-                    <button
-                        className="text-blue-500 hover:text-blue-700"
-                        title="Editar"
-                        onClick={() => handleEditar(info.row.original.id)}
-                    >
-                        <FaEdit />
-                    </button>
-                    <button
-                        className="text-red-500 hover:text-red-700"
-                        title="Excluir"
-                        onClick={() => handleStatusConta(info.row.original.id, 'Excluída')}
-                    >
-                        <FaTrash />
-                    </button>
-                </div>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div className="flex items-center space-x-2">
+                        <span
+                            className={`px-3 py-1 text-xs font-semibold rounded-full border ${statusInfo.color}`}
+                        >
+                            {statusInfo.label}
+                        </span>
+                        <span className={`w-2 h-2 rounded-full ${statusInfo.badgeColor}`} />
+                    </div>
+                );
+            },
+        }),
+        columnHelper.accessor('created_at', {
+            header: () => <p className="text-sm font-bold text-gray-600 dark:text-white">CADASTRO</p>,
+            cell: (info) => (
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                    {formatDate(info.getValue())}
+                </p>
             ),
+        }),
+        columnHelper.accessor('acoes', {
+            header: () => <p className="text-sm font-bold text-gray-600 dark:text-white">AÇÕES</p>,
+            cell: (info) => {
+                const empresa = info.row.original;
+
+                return (
+                    <div className="flex space-x-3">
+                        <button
+                            onClick={() => handleVisualizar(empresa.id)}
+                            className="text-blue-500 hover:text-blue-700 transition-colors"
+                            title="Visualizar Perfil"
+                        >
+                            <FaEye size={18} />
+                        </button>
+                        <button
+                            onClick={() => iniciarEdicaoStatus(empresa)}
+                            className="text-green-500 hover:text-green-700 transition-colors"
+                            title="Editar Status"
+                        >
+                            <FaEdit size={18} />
+                        </button>
+                    </div>
+                );
+            },
         }),
     ];
 
@@ -118,31 +229,87 @@ const GerenciamentoEmpresas = () => {
         getCoreRowModel: getCoreRowModel(),
     });
 
+    if (loading) {
+        return (
+            <div className="p-6">
+                <Card extra={"w-full h-full sm:overflow-auto px-6 py-12"}>
+                    <div className="flex justify-center items-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-500"></div>
+                    </div>
+                </Card>
+            </div>
+        );
+    }
+
     return (
         <div className="p-6">
+            {/* Cabeçalho com estatísticas */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <Card extra={"p-4"}>
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <FaBuilding className="text-blue-600" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-gray-500">Total de Empresas</p>
+                            <p className="text-2xl font-bold">{empresas.length}</p>
+                        </div>
+                    </div>
+                </Card>
 
-            {/* Tabela de Empresas Cadastradas */}
-            <Card extra={"w-full h-full sm:overflow-auto px-6 mt-6 mb-6"}>
-                <header className="relative flex items-center justify-between pt-4">
-                    <div className="text-xl font-bold text-navy-700 dark:text-white">
-                        Lista de Empresas Cadastradas
+                <Card extra={"p-4"}>
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                            <FaCheck className="text-green-600" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-gray-500">Empresas Ativas</p>
+                            <p className="text-2xl font-bold">
+                                {empresas.filter(e => !e.deleted_at).length}
+                            </p>
+                        </div>
+                    </div>
+                </Card>
+
+                <Card extra={"p-4"}>
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+                            <FaTimes className="text-red-600" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-gray-500">Empresas Suspensas</p>
+                            <p className="text-2xl font-bold">
+                                {empresas.filter(e => e.deleted_at).length}
+                            </p>
+                        </div>
+                    </div>
+                </Card>
+            </div>
+
+            {/* Tabela de Empresas */}
+            <Card extra={"w-full h-full sm:overflow-auto px-6"}>
+                <header className="relative flex items-center justify-between pt-4 pb-2">
+                    <div>
+                        <h2 className="text-xl font-bold text-navy-700 dark:text-white">
+                            Lista de Empresas Cadastradas
+                        </h2>
+                        <p className="text-sm text-gray-500 mt-1">
+                            Gerencie todas as empresas organizadoras da plataforma
+                        </p>
                     </div>
                 </header>
 
-                <div className="mt-5 overflow-x-scroll xl:overflow-x-hidden">
+                <div className="mt-5 overflow-x-auto">
                     <table className="w-full">
                         <thead>
                             {table.getHeaderGroups().map((headerGroup) => (
-                                <tr key={headerGroup.id} className="!border-px !border-gray-400">
+                                <tr key={headerGroup.id} className="border-b border-gray-200">
                                     {headerGroup.headers.map((header) => (
                                         <th
                                             key={header.id}
-                                            colSpan={header.colSpan}
-                                            className="cursor-pointer border-b-[1px] border-gray-200 pt-4 pb-2 pr-4 text-start"
+                                            className="text-left py-3 px-2 text-xs font-bold text-gray-500 uppercase tracking-wider"
                                         >
-                                            <div className="items-center justify-between text-xs text-gray-200">
-                                                {flexRender(header.column.columnDef.header, header.getContext())}
-                                            </div>
+                                            {flexRender(header.column.columnDef.header, header.getContext())}
                                         </th>
                                     ))}
                                 </tr>
@@ -150,11 +317,14 @@ const GerenciamentoEmpresas = () => {
                         </thead>
                         <tbody>
                             {table.getRowModel().rows.map((row) => (
-                                <tr key={row.id}>
+                                <tr
+                                    key={row.id}
+                                    className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+                                >
                                     {row.getVisibleCells().map((cell) => (
                                         <td
                                             key={cell.id}
-                                            className="min-w-[150px] border-white/0 py-3 pr-4"
+                                            className="py-3 px-2"
                                         >
                                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                                         </td>
@@ -164,57 +334,14 @@ const GerenciamentoEmpresas = () => {
                         </tbody>
                     </table>
                 </div>
-            </Card>
 
-            {/* Edição de Dados Cadastrais */}
-            {editingEmpresa && (
-                <Card extra={"w-full h-full sm:overflow-auto px-6 mt-6 mb-6"}>
-                    <header className="relative flex items-center justify-between pt-4">
-                        <div className="text-xl font-bold text-navy-700 dark:text-white">
-                            Editar Dados da Empresa
-                        </div>
-                    </header>
-
-                    <div className="mt-5">
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-700 dark:text-white">
-                                Nome
-                            </label>
-                            <input
-                                type="text"
-                                value={editingEmpresa.nome}
-                                onChange={(e) =>
-                                    setEditingEmpresa({ ...editingEmpresa, nome: e.target.value })
-                                }
-                                className="mt-1 p-2 w-full border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-                            />
-                        </div>
-
-                        <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-700 dark:text-white">
-                                CNPJ
-                            </label>
-                            <input
-                                type="text"
-                                value={editingEmpresa.cnpj}
-                                onChange={(e) =>
-                                    setEditingEmpresa({ ...editingEmpresa, cnpj: e.target.value })
-                                }
-                                className="mt-1 p-2 w-full border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500"
-                            />
-                        </div>
-
-                        <button
-                            onClick={handleSalvarEdicao}
-                            className="bg-green-500 mb-4 text-white px-4 py-2 rounded-lg hover:bg-green-600 flex items-center"
-                        >
-                            <FaCheck className="mr-2" />
-                            Salvar Alterações
-                        </button>
+                {empresas.length === 0 && (
+                    <div className="text-center py-12">
+                        <FaBuilding className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                        <p className="text-gray-500">Nenhuma empresa encontrada</p>
                     </div>
-                </Card>
-            )}
-
+                )}
+            </Card>
         </div>
     );
 };
