@@ -148,6 +148,14 @@ const routes = [
     component: <Seguranca />,
   },
   {
+    name: "Admins",
+    layout: "/admin",
+    icon: <FaKey className="inline-block h-5 w-5" />,
+    path: "admins",
+    admin: true,
+    component: <GerenciamentoAdmins />,
+  },
+  {
     name: "Perfil",
     layout: "/admin",
     path: "profile",
@@ -187,14 +195,6 @@ const routes = [
   //   icon: <FaFingerprint className="h-6 w-6" />,
   //   component: <UsuariosLogados />,
   // },
-  {
-    name: "Admins",
-    layout: "/admin",
-    icon: <FaKey className="inline-block h-5 w-5" />,
-    path: "admins",
-    admin: true,
-    component: <GerenciamentoAdmins />,
-  },
   
 ];
 export default routes;

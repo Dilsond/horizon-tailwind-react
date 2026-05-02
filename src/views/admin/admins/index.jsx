@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FaCheck, FaTimes, FaTrash, FaPlus, FaLock } from 'react-icons/fa';
+import { FaTrash, FaPlus, FaLock, FaShieldAlt, FaCrown, FaUserCheck, FaUserSlash, FaEye, FaEyeSlash } from 'react-icons/fa';
 import Card from 'components/card';
 import {
     createColumnHelper,
@@ -17,398 +17,433 @@ const LoaderContainer = styled.div`
   justify-content: center;
   align-items: center;
   height: 100vh;
-  background-color: rgba(255, 255, 255, 0.0);
 `;
 
 const GerenciamentoAdmins = () => {
     const [admins, setAdmins] = useState([]);
+    const [suspendedAdmins, setSuspendedAdmins] = useState([]);
     const [loading, setLoading] = useState(true);
     const [globalFilter, setGlobalFilter] = useState('');
+    const [globalFilterSuspended, setGlobalFilterSuspended] = useState('');
     const [showVerifyModal, setShowVerifyModal] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [showReactivateModal, setShowReactivateModal] = useState(false);
     const [adminToDelete, setAdminToDelete] = useState(null);
+    const [adminToReactivate, setAdminToReactivate] = useState(null);
     const [currentUser, setCurrentUser] = useState(null);
     const [formData, setFormData] = useState({ nome: '', email: '', senha: '' });
+    const [showFormPassword, setShowFormPassword] = useState(false);
     const [error, setError] = useState(null);
     const [success, setSuccess] = useState(null);
-    const [pendingAction, setPendingAction] = useState(null);
     const [isVerifying, setIsVerifying] = useState(false);
     const [verifyPassword, setVerifyPassword] = useState('');
 
-    // Buscar usuário atual
+    const isSuperAdmin = currentUser?.role === 'super_admin';
+
+    // ── Carregar utilizador actual ──
     useEffect(() => {
-        const getUser = async () => {
-            const storedUser = localStorage.getItem('user');
-            if (storedUser) {
-                try {
-                    const user = JSON.parse(storedUser);
-                    setCurrentUser(user);
-                } catch (err) {
-                    console.error('Erro ao parsear usuário:', err);
-                }
-            }
-        };
-        getUser();
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+            try { setCurrentUser(JSON.parse(storedUser)); }
+            catch (err) { console.error('Erro ao parsear usuário:', err); }
+        }
     }, []);
 
-    // Buscar administradores
+    useEffect(() => {
+        if (currentUser?.id) refreshCurrentUser();
+    }, [currentUser?.id]);
+
+    const refreshCurrentUser = async () => {
+        const { data } = await supabase
+            .from('administradores')
+            .select('id, nome, email, role, cargo')
+            .eq('id', currentUser?.id)
+            .single();
+        if (data) {
+            const updated = { ...currentUser, ...data };
+            setCurrentUser(updated);
+            localStorage.setItem('user', JSON.stringify(updated));
+            localStorage.setItem('admin', JSON.stringify(updated));
+        }
+    };
+
+    // ── Buscar admins ──
     const fetchAdmins = async () => {
         try {
             setLoading(true);
             setError(null);
 
-            const { data, error: fetchError } = await supabase
+            const { data: active, error: e1 } = await supabase
                 .from('administradores')
                 .select('*')
                 .is('deleted_at', null)
                 .order('created_at', { ascending: false });
+            if (e1) throw e1;
+            setAdmins(active || []);
 
-            if (fetchError) throw fetchError;
-            setAdmins(data || []);
-        } catch (error) {
-            console.error('Error fetching admins:', error);
+            // Suspensos: só o super admin carrega
+            if (isSuperAdmin) {
+                const { data: suspended, error: e2 } = await supabase
+                    .from('administradores')
+                    .select('*')
+                    .not('deleted_at', 'is', null)
+                    .order('deleted_at', { ascending: false });
+                if (e2) throw e2;
+                setSuspendedAdmins(suspended || []);
+            }
+        } catch (err) {
             setError('Erro ao carregar administradores');
         } finally {
             setLoading(false);
         }
     };
 
-    useEffect(() => {
-        fetchAdmins();
-    }, []);
+    useEffect(() => { fetchAdmins(); }, [isSuperAdmin]);
 
-    // Verificar senha do admin atual — compara diretamente com o valor armazenado no banco
-    const handleVerifyAdmin = async () => {
-        if (!verifyPassword) {
-            setError('Por favor, digite sua senha');
-            return;
-        }
-
+    // ── Verificar senha antes de suspender ──
+    const handleVerifyAndDelete = async () => {
+        if (!verifyPassword) { setError('Por favor, digite sua senha'); return; }
         setIsVerifying(true);
         setError(null);
-
         try {
-            // Buscar admin atual no banco
             const { data: admin, error: fetchError } = await supabase
                 .from('administradores')
-                .select('id, senha')
+                .select('id, senha, role')
                 .eq('id', currentUser?.id)
                 .single();
 
-            if (fetchError) throw fetchError;
-            if (!admin) {
-                setError('Administrador não encontrado');
-                setIsVerifying(false);
-                return;
-            }
+            if (fetchError || !admin) { setError('Administrador não encontrado'); return; }
 
-            // Verificar senha — tenta bcrypt via supabase rpc se disponível,
-            // caso contrário faz comparação directa (útil quando a senha foi
-            // armazenada em texto simples ou com hash próprio do projecto)
             let passwordMatch = false;
-
-            // Tentativa 1: RPC verify_admin_password (bcrypt no servidor)
             const { data: rpcResult, error: rpcError } = await supabase
-                .rpc('verify_admin_password', {
-                    admin_id: currentUser?.id,
-                    input_password: verifyPassword,
-                });
+                .rpc('verify_admin_password', { admin_id: currentUser?.id, input_password: verifyPassword });
 
-            if (!rpcError && rpcResult !== null) {
-                passwordMatch = rpcResult === true;
-            } else {
-                // Tentativa 2: comparação directa (senha em texto simples ou hash próprio)
-                passwordMatch = admin.senha === verifyPassword;
-            }
+            passwordMatch = (!rpcError && rpcResult !== null)
+                ? rpcResult === true
+                : admin.senha === verifyPassword;
 
-            if (!passwordMatch) {
-                setError('Senha incorreta');
-                setIsVerifying(false);
-                return;
-            }
+            if (!passwordMatch) { setError('Senha incorreta.'); return; }
 
-            setSuccess('Identidade verificada com sucesso!');
             setShowVerifyModal(false);
             setVerifyPassword('');
-            setTimeout(() => setSuccess(null), 3000);
-
-            if (pendingAction === 'add') {
-                setShowAddModal(true);
-            } else if (pendingAction === 'delete') {
-                setShowDeleteModal(true);
-            }
-
-        } catch (error) {
-            console.error('Verification error:', error);
+            setShowDeleteModal(true);
+        } catch (err) {
             setError('Erro ao verificar senha');
         } finally {
             setIsVerifying(false);
         }
     };
 
-    // Adicionar novo administrador
+    // ── Adicionar admin ──
     const handleAddAdmin = async () => {
-        if (!formData.nome || !formData.email) {
-            setError('Preencha todos os campos');
+        if (!formData.nome || !formData.email || !formData.senha) {
+            setError('Preencha todos os campos obrigatórios');
             return;
         }
-
+        if (formData.senha.length < 6) {
+            setError('A senha deve ter pelo menos 6 caracteres');
+            return;
+        }
         setLoading(true);
         setError(null);
-
         try {
-            // Verificar se email já existe
-            const { data: existing, error: checkError } = await supabase
+            const { data: existing } = await supabase
                 .from('administradores')
                 .select('email')
-                .eq('email', formData.email)
+                .eq('email', formData.email.trim().toLowerCase())
                 .maybeSingle();
 
-            if (checkError) throw checkError;
+            if (existing) { setError('Email já registado'); setLoading(false); return; }
 
-            if (existing) {
-                setError('Email já registado');
-                setLoading(false);
-                return;
-            }
-
-            // Gerar senha temporária aleatória
-            const tempPassword = Math.random().toString(36).slice(-8) +
-                Math.random().toString(36).slice(-4).toUpperCase();
-
-            // Inserir novo administrador com senha em texto simples
-            // (a hash será aplicada pelo trigger do banco, se existir)
-            const { data: newAdmin, error: insertError } = await supabase
+            const { error: insertError } = await supabase
                 .from('administradores')
-                .insert([
-                    {
-                        nome: formData.nome,
-                        email: formData.email,
-                        senha: tempPassword,
-                        cargo: 'Administrador',
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString(),
-                    }
-                ])
-                .select()
-                .single();
+                .insert([{
+                    nome: formData.nome,
+                    email: formData.email.trim().toLowerCase(),
+                    senha: formData.senha,
+                    cargo: 'Administrador',
+                    role: 'admin',
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                }]);
 
             if (insertError) throw insertError;
 
-            setSuccess(`Admin adicionado! Senha temporária: ${tempPassword}`);
+            setSuccess('Administrador criado com sucesso!');
             setShowAddModal(false);
             setFormData({ nome: '', email: '', senha: '' });
             await fetchAdmins();
-            setTimeout(() => setSuccess(null), 8000);
-
-        } catch (error) {
-            console.error('Add admin error:', error);
-            setError('Erro ao adicionar administrador: ' + (error.message || ''));
+            setTimeout(() => setSuccess(null), 6000);
+        } catch (err) {
+            setError('Erro ao adicionar administrador: ' + (err.message || ''));
         } finally {
             setLoading(false);
         }
     };
 
-    // Remover administrador (soft delete)
+    // ── Suspender ──
     const handleDeleteAdmin = async () => {
         setLoading(true);
         setError(null);
-
         try {
             if (adminToDelete === currentUser?.id) {
-                setError('Você não pode remover sua própria conta');
+                setError('Não pode suspender a sua própria conta');
                 setLoading(false);
                 return;
             }
-
             const { error: deleteError } = await supabase
                 .from('administradores')
-                .update({
-                    deleted_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                })
+                .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
                 .eq('id', adminToDelete);
 
             if (deleteError) throw deleteError;
-
-            setSuccess('Admin removido com sucesso!');
+            setSuccess('Administrador suspenso com sucesso!');
             setShowDeleteModal(false);
             setAdminToDelete(null);
             await fetchAdmins();
-            setTimeout(() => setSuccess(null), 3000);
-
-        } catch (error) {
-            console.error('Delete admin error:', error);
-            setError('Erro ao remover administrador');
+            setTimeout(() => setSuccess(null), 4000);
+        } catch (err) {
+            setError('Erro ao suspender administrador');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleInputChange = (e) => {
-        const { name, value } = e.target;
-        setFormData({ ...formData, [name]: value });
-    };
-
-    const prepareAddAdmin = () => {
+    // ── Reativar ──
+    const handleReactivateAdmin = async () => {
+        setLoading(true);
         setError(null);
-        setVerifyPassword('');
-        setPendingAction('add');
-        setShowVerifyModal(true);
+        try {
+            const { error: reactivateError } = await supabase
+                .from('administradores')
+                .update({ deleted_at: null, updated_at: new Date().toISOString() })
+                .eq('id', adminToReactivate);
+
+            if (reactivateError) throw reactivateError;
+            setSuccess('Administrador reativado com sucesso!');
+            setShowReactivateModal(false);
+            setAdminToReactivate(null);
+            await fetchAdmins();
+            setTimeout(() => setSuccess(null), 4000);
+        } catch (err) {
+            setError('Erro ao reativar administrador');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const prepareDelete = (adminId) => {
+        if (!isSuperAdmin) return;
         setAdminToDelete(adminId);
         setError(null);
         setVerifyPassword('');
-        setPendingAction('delete');
         setShowVerifyModal(true);
     };
 
+    const prepareReactivate = (adminId) => {
+        if (!isSuperAdmin) return;
+        setAdminToReactivate(adminId);
+        setError(null);
+        setShowReactivateModal(true);
+    };
+
+    // ── Definição de colunas ──
     const columnHelper = createColumnHelper();
-    const columns = [
+
+    const activeColumns = [
         columnHelper.accessor('id', {
             header: () => <p className="text-sm font-bold text-gray-600">ID</p>,
-            cell: (info) => (
-                <p className="text-sm text-gray-500 font-mono">
-                    {info.getValue().substring(0, 8)}...
-                </p>
-            ),
+            cell: (info) => <p className="text-xs text-gray-400 font-mono">{info.getValue().substring(0, 8)}…</p>,
         }),
         columnHelper.accessor('nome', {
             header: () => <p className="text-sm font-bold text-gray-600">NOME</p>,
             cell: (info) => (
-                <p className="text-sm font-medium text-navy-700">{info.getValue()}</p>
+                <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-navy-700">{info.getValue()}</p>
+                    {info.row.original.id === currentUser?.id && <span className="text-xs text-gray-400">(você)</span>}
+                </div>
             ),
         }),
         columnHelper.accessor('email', {
             header: () => <p className="text-sm font-bold text-gray-600">EMAIL</p>,
-            cell: (info) => (
-                <p className="text-sm text-gray-500">{info.getValue()}</p>
-            ),
+            cell: (info) => <p className="text-sm text-gray-500">{info.getValue()}</p>,
+        }),
+        columnHelper.accessor('role', {
+            header: () => <p className="text-sm font-bold text-gray-600">TIPO</p>,
+            cell: (info) => {
+                const isSA = info.getValue() === 'super_admin';
+                return (
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${isSA ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {isSA ? <FaCrown className="w-3 h-3" /> : <FaShieldAlt className="w-3 h-3" />}
+                        {isSA ? 'Super Admin' : 'Admin'}
+                    </span>
+                );
+            },
         }),
         columnHelper.accessor('cargo', {
             header: () => <p className="text-sm font-bold text-gray-600">CARGO</p>,
-            cell: (info) => (
-                <p className="text-sm text-gray-500">{info.getValue() || 'Administrador'}</p>
-            ),
+            cell: (info) => <p className="text-sm text-gray-500">{info.getValue() || 'Administrador'}</p>,
         }),
         columnHelper.accessor('created_at', {
             header: () => <p className="text-sm font-bold text-gray-600">CRIADO EM</p>,
-            cell: (info) => {
-                const date = new Date(info.getValue());
-                return (
-                    <p className="text-sm text-gray-500">
-                        {date.toLocaleDateString('pt-PT')}
-                    </p>
-                );
-            },
+            cell: (info) => <p className="text-sm text-gray-500">{new Date(info.getValue()).toLocaleDateString('pt-PT')}</p>,
         }),
         columnHelper.display({
             id: 'acoes',
             header: () => <p className="text-sm font-bold text-gray-600">AÇÕES</p>,
             cell: ({ row }) => {
                 const isCurrentUser = row.original.id === currentUser?.id;
+                const isTargetSA = row.original.role === 'super_admin';
+                if (!isSuperAdmin || isCurrentUser || isTargetSA) {
+                    return <span className="text-xs text-gray-300 italic">{isTargetSA && !isCurrentUser ? 'Protegido' : '—'}</span>;
+                }
                 return (
-                    <div className="flex space-x-2">
-                        <button
-                            onClick={() => prepareDelete(row.original.id)}
-                            disabled={isCurrentUser}
-                            className={`text-red-500 hover:text-red-700 transition-colors ${isCurrentUser ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            title={isCurrentUser ? 'Não pode remover a própria conta' : 'Remover admin'}
-                        >
-                            <FaTrash />
-                        </button>
-                    </div>
+                    <button onClick={() => prepareDelete(row.original.id)}
+                        className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded transition-colors">
+                        <FaUserSlash className="w-3 h-3" /> Suspender
+                    </button>
                 );
             },
         }),
     ];
 
-    const table = useReactTable({
-        data: admins,
-        columns,
+    const suspendedColumnHelper = createColumnHelper();
+    const suspendedColumns = [
+        suspendedColumnHelper.accessor('id', {
+            header: () => <p className="text-sm font-bold text-gray-600">ID</p>,
+            cell: (info) => <p className="text-xs text-gray-400 font-mono">{info.getValue().substring(0, 8)}…</p>,
+        }),
+        suspendedColumnHelper.accessor('nome', {
+            header: () => <p className="text-sm font-bold text-gray-600">NOME</p>,
+            cell: (info) => <p className="text-sm font-medium text-gray-600">{info.getValue()}</p>,
+        }),
+        suspendedColumnHelper.accessor('email', {
+            header: () => <p className="text-sm font-bold text-gray-600">EMAIL</p>,
+            cell: (info) => <p className="text-sm text-gray-500">{info.getValue()}</p>,
+        }),
+        suspendedColumnHelper.accessor('role', {
+            header: () => <p className="text-sm font-bold text-gray-600">TIPO</p>,
+            cell: (info) => {
+                const isSA = info.getValue() === 'super_admin';
+                return (
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${isSA ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                        {isSA ? <FaCrown className="w-3 h-3" /> : <FaShieldAlt className="w-3 h-3" />}
+                        {isSA ? 'Super Admin' : 'Admin'}
+                    </span>
+                );
+            },
+        }),
+        suspendedColumnHelper.accessor('deleted_at', {
+            header: () => <p className="text-sm font-bold text-gray-600">SUSPENSO EM</p>,
+            cell: (info) => (
+                <p className="text-sm text-red-400">
+                    {info.getValue() ? new Date(info.getValue()).toLocaleDateString('pt-PT') : '—'}
+                </p>
+            ),
+        }),
+        suspendedColumnHelper.display({
+            id: 'reativar',
+            header: () => <p className="text-sm font-bold text-gray-600">AÇÕES</p>,
+            cell: ({ row }) => (
+                <button onClick={() => prepareReactivate(row.original.id)}
+                    className="flex items-center gap-1.5 text-xs text-green-600 hover:text-green-800 hover:bg-green-50 px-2 py-1 rounded transition-colors">
+                    <FaUserCheck className="w-3 h-3" /> Reativar
+                </button>
+            ),
+        }),
+    ];
+
+    const activeTable = useReactTable({
+        data: admins, columns: activeColumns,
         getCoreRowModel: getCoreRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
         state: { globalFilter },
         onGlobalFilterChange: setGlobalFilter,
     });
 
+    const suspendedTable = useReactTable({
+        data: suspendedAdmins, columns: suspendedColumns,
+        getCoreRowModel: getCoreRowModel(),
+        getFilteredRowModel: getFilteredRowModel(),
+        state: { globalFilter: globalFilterSuspended },
+        onGlobalFilterChange: setGlobalFilterSuspended,
+    });
+
     if (loading && admins.length === 0) {
-        return (
-            <LoaderContainer>
-                <SyncLoader color="#1B254B" size={15} />
-            </LoaderContainer>
-        );
+        return <LoaderContainer><SyncLoader color="#1B254B" size={15} /></LoaderContainer>;
     }
 
     return (
-        <div>
+        <div className="space-y-6">
+
+            {/* Aviso modo leitura */}
+            {!isSuperAdmin && (
+                <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg mt-4 sm:mt-10">
+                    <FaShieldAlt className="flex-shrink-0" />
+                    <p className="text-sm">
+                        Está em modo leitura. Apenas o <strong>Super Admin</strong> pode adicionar, suspender ou reativar contas.
+                    </p>
+                </div>
+            )}
+
             {error && (
-                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mt-4 sm:mt-10 mb-4" role="alert">
-                    <span className="block sm:inline">{error}</span>
+                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded" role="alert">
+                    {error}
                 </div>
             )}
             {success && (
-                <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mt-4 sm:mt-10 mb-4" role="alert">
-                    <span className="block sm:inline">{success}</span>
+                <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded" role="alert">
+                    {success}
                 </div>
             )}
 
-            <Card extra="w-full h-full sm:overflow-auto px-6 mt-6 mb-6">
-                <header className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between pt-2 sm:pt-4 gap-2 sm:gap-0">
-                    <div className="text-lg sm:text-xl font-bold text-navy-700 mt-3">
-                        Lista de Administradores
+            {/* ══ Tabela: Ativos ══ */}
+            <Card extra="w-full h-full sm:overflow-auto px-6 pt-4 pb-6 mt-5">
+                <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-5">
+                    <div className="flex items-center gap-3">
+                        <h2 className="text-xl font-bold text-navy-700">Administradores Ativos</h2>
+                        {isSuperAdmin && (
+                            <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 text-xs font-semibold px-2.5 py-1 rounded-full">
+                                <FaCrown className="w-3 h-3" /> Super Admin
+                            </span>
+                        )}
                     </div>
-                    <div className="flex flex-col sm:flex-row w-full sm:w-auto space-y-2 sm:space-y-0 sm:space-x-2">
-                        <input
-                            type="text"
-                            placeholder="Pesquise aqui..."
-                            value={globalFilter}
+                    <div className="flex flex-col sm:flex-row w-full sm:w-auto gap-2">
+                        <input type="text" placeholder="Pesquisar..." value={globalFilter}
                             onChange={(e) => setGlobalFilter(e.target.value)}
-                            className="p-2 border border-gray-300 rounded-lg w-full text-navy-700 sm:w-64 focus:outline-none focus:ring-2 focus:ring-navy-500"
-                        />
-                        <button
-                            onClick={prepareAddAdmin}
-                            className="bg-navy-700 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-navy-800 flex items-center justify-center transition-colors"
-                        >
-                            <FaPlus className="mr-2" />
-                            <span className="text-sm sm:text-base">Adicionar</span>
-                        </button>
+                            className="p-2 border border-gray-300 rounded-lg w-full sm:w-56 text-navy-700 focus:outline-none focus:ring-2 focus:ring-navy-500 text-sm" />
+                        {isSuperAdmin && (
+                            <button
+                                onClick={() => { setError(null); setFormData({ nome: '', email: '', senha: '' }); setShowAddModal(true); }}
+                                className="bg-navy-700 text-white px-4 py-2 rounded-lg hover:bg-navy-800 flex items-center justify-center gap-2 transition-colors text-sm whitespace-nowrap">
+                                <FaPlus /> Adicionar Admin
+                            </button>
+                        )}
                     </div>
                 </header>
-
-                <div className="mt-3 sm:mt-5 overflow-x-auto">
-                    <div className="min-w-[600px] sm:min-w-0">
+                <div className="overflow-x-auto">
+                    <div className="min-w-[640px] sm:min-w-0">
                         <table className="w-full">
                             <thead>
-                                {table.getHeaderGroups().map((headerGroup) => (
-                                    <tr key={headerGroup.id} className="border-b border-gray-200">
-                                        {headerGroup.headers.map((header) => (
-                                            <th key={header.id} className="py-3 text-left text-xs sm:text-sm font-semibold text-gray-600">
-                                                {flexRender(header.column.columnDef.header, header.getContext())}
-                                            </th>
+                                {activeTable.getHeaderGroups().map((hg) => (
+                                    <tr key={hg.id} className="border-b border-gray-200">
+                                        {hg.headers.map((h) => (
+                                            <th key={h.id} className="py-3 text-left">{flexRender(h.column.columnDef.header, h.getContext())}</th>
                                         ))}
                                     </tr>
                                 ))}
                             </thead>
                             <tbody>
-                                {table.getRowModel().rows.map((row) => (
+                                {activeTable.getRowModel().rows.map((row) => (
                                     <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                                         {row.getVisibleCells().map((cell) => (
-                                            <td key={cell.id} className="py-3 text-sm">
-                                                {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                            </td>
+                                            <td key={cell.id} className="py-3">{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
                                         ))}
                                     </tr>
                                 ))}
-                                {table.getRowModel().rows.length === 0 && (
-                                    <tr>
-                                        <td colSpan={columns.length} className="text-center py-8 text-gray-500">
-                                            Nenhum administrador encontrado
-                                        </td>
-                                    </tr>
+                                {activeTable.getRowModel().rows.length === 0 && (
+                                    <tr><td colSpan={activeColumns.length} className="text-center py-10 text-gray-400 text-sm">Nenhum administrador encontrado</td></tr>
                                 )}
                             </tbody>
                         </table>
@@ -416,57 +451,76 @@ const GerenciamentoAdmins = () => {
                 </div>
             </Card>
 
-            {/* Modal de Verificação de Senha */}
-            {showVerifyModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
-                        <div className="p-6">
-                            <h3 className="text-lg font-semibold mb-4 text-navy-700">
-                                Verificar Identidade
-                            </h3>
-                            <p className="mb-4 text-gray-600">
-                                Digite sua senha para confirmar esta ação:
-                            </p>
-                            <input
-                                type="password"
-                                value={verifyPassword}
-                                onChange={(e) => {
-                                    setVerifyPassword(e.target.value);
-                                    setError(null);
-                                }}
-                                onKeyDown={(e) => e.key === 'Enter' && handleVerifyAdmin()}
-                                className="w-full p-2 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-navy-500"
-                                placeholder="Sua senha"
-                                autoFocus
-                            />
-                            {error && (
-                                <p className="text-red-500 text-sm mb-4">{error}</p>
-                            )}
-                            <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
-                                <button
-                                    onClick={() => {
-                                        setShowVerifyModal(false);
-                                        setPendingAction(null);
-                                        setError(null);
-                                        setVerifyPassword('');
-                                    }}
-                                    className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100 transition-colors"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    onClick={handleVerifyAdmin}
-                                    disabled={isVerifying}
-                                    className="px-4 py-2 bg-navy-700 text-white rounded-md hover:bg-navy-800 flex items-center justify-center transition-colors disabled:opacity-50"
-                                >
-                                    {isVerifying ? (
-                                        <SyncLoader color="#ffffff" size={8} />
-                                    ) : (
-                                        <>
-                                            <FaLock className="mr-2" />
-                                            Verificar
-                                        </>
+            {/* ══ Tabela: Suspensos — só super admin ══ */}
+            {isSuperAdmin && (
+                <Card extra="w-full h-full sm:overflow-auto px-6 pt-4 pb-6">
+                    <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-5">
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-xl font-bold text-navy-700">Administradores Suspensos</h2>
+                            <span className="inline-flex items-center gap-1 bg-red-100 text-red-600 text-xs font-semibold px-2.5 py-1 rounded-full">
+                                <FaUserSlash className="w-3 h-3" /> {suspendedAdmins.length}
+                            </span>
+                        </div>
+                        <input type="text" placeholder="Pesquisar suspensos..." value={globalFilterSuspended}
+                            onChange={(e) => setGlobalFilterSuspended(e.target.value)}
+                            className="p-2 border border-gray-300 rounded-lg w-full sm:w-56 text-navy-700 focus:outline-none focus:ring-2 focus:ring-navy-500 text-sm" />
+                    </header>
+                    <div className="overflow-x-auto">
+                        <div className="min-w-[560px] sm:min-w-0">
+                            <table className="w-full">
+                                <thead>
+                                    {suspendedTable.getHeaderGroups().map((hg) => (
+                                        <tr key={hg.id} className="border-b border-gray-200">
+                                            {hg.headers.map((h) => (
+                                                <th key={h.id} className="py-3 text-left">{flexRender(h.column.columnDef.header, h.getContext())}</th>
+                                            ))}
+                                        </tr>
+                                    ))}
+                                </thead>
+                                <tbody>
+                                    {suspendedTable.getRowModel().rows.map((row) => (
+                                        <tr key={row.id} className="border-b border-gray-100 hover:bg-red-50/40 transition-colors">
+                                            {row.getVisibleCells().map((cell) => (
+                                                <td key={cell.id} className="py-3">{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
+                                            ))}
+                                        </tr>
+                                    ))}
+                                    {suspendedTable.getRowModel().rows.length === 0 && (
+                                        <tr><td colSpan={suspendedColumns.length} className="text-center py-10 text-gray-400 text-sm">Nenhum administrador suspenso</td></tr>
                                     )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </Card>
+            )}
+
+            {/* ── Modal: Verificar senha ── */}
+            {showVerifyModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+                        <div className="p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <FaLock className="text-red-600" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-semibold text-navy-700">Confirmar Identidade</h3>
+                                    <p className="text-xs text-gray-500">Digite a sua senha de Super Admin para continuar</p>
+                                </div>
+                            </div>
+                            <input type="password" value={verifyPassword}
+                                onChange={(e) => { setVerifyPassword(e.target.value); setError(null); }}
+                                onKeyDown={(e) => e.key === 'Enter' && handleVerifyAndDelete()}
+                                className="w-full p-3 border border-gray-300 rounded-lg mb-3 focus:outline-none focus:ring-2 focus:ring-red-400 text-sm"
+                                placeholder="A sua senha" autoFocus />
+                            {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
+                            <div className="flex flex-col sm:flex-row justify-end gap-2">
+                                <button onClick={() => { setShowVerifyModal(false); setAdminToDelete(null); setError(null); setVerifyPassword(''); }}
+                                    className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm transition-colors">Cancelar</button>
+                                <button onClick={handleVerifyAndDelete} disabled={isVerifying}
+                                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center justify-center gap-2 text-sm transition-colors disabled:opacity-50">
+                                    {isVerifying ? <SyncLoader color="#fff" size={8} /> : <><FaLock /> Verificar</>}
                                 </button>
                             </div>
                         </div>
@@ -474,70 +528,57 @@ const GerenciamentoAdmins = () => {
                 </div>
             )}
 
-            {/* Modal de Adicionar Admin */}
+            {/* ── Modal: Adicionar Admin ── */}
             {showAddModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
                         <div className="p-6">
-                            <h3 className="text-lg font-semibold mb-4 text-navy-700">
-                                Adicionar Novo Admin
-                            </h3>
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="w-10 h-10 bg-navy-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <FaPlus className="text-navy-700" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-semibold text-navy-700">Adicionar Novo Admin</h3>
+                                    <p className="text-xs text-gray-500">O novo admin terá nível <strong>Admin</strong></p>
+                                </div>
+                            </div>
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Nome
-                                    </label>
-                                    <input
-                                        type="text"
-                                        name="nome"
-                                        value={formData.nome}
-                                        onChange={handleInputChange}
-                                        className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500"
-                                        placeholder="Nome do admin"
-                                        autoFocus
-                                    />
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
+                                    <input type="text" value={formData.nome}
+                                        onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                                        className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 text-sm"
+                                        placeholder="Nome completo" autoFocus />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Email
-                                    </label>
-                                    <input
-                                        type="email"
-                                        name="email"
-                                        value={formData.email}
-                                        onChange={handleInputChange}
-                                        className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500"
-                                        placeholder="Email do admin"
-                                    />
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                                    <input type="email" value={formData.email}
+                                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                        className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 text-sm"
+                                        placeholder="email@exemplo.com" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Senha *</label>
+                                    <div className="relative">
+                                        <input type={showFormPassword ? 'text' : 'password'} value={formData.senha}
+                                            onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
+                                            className="w-full p-3 pr-11 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500 text-sm"
+                                            placeholder="Mínimo 6 caracteres" />
+                                        <button type="button" onClick={() => setShowFormPassword(!showFormPassword)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
+                                            {showFormPassword ? <FaEyeSlash className="w-4 h-4" /> : <FaEye className="w-4 h-4" />}
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-gray-400 mt-1">Mínimo de 6 caracteres</p>
                                 </div>
                             </div>
-                            {error && (
-                                <p className="text-red-500 text-sm mt-3">{error}</p>
-                            )}
-                            <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 mt-6">
-                                <button
-                                    onClick={() => {
-                                        setShowAddModal(false);
-                                        setFormData({ nome: '', email: '', senha: '' });
-                                        setError(null);
-                                    }}
-                                    className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100 transition-colors"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    onClick={handleAddAdmin}
-                                    disabled={loading}
-                                    className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 flex items-center justify-center transition-colors disabled:opacity-50"
-                                >
-                                    {loading ? (
-                                        <SyncLoader color="#ffffff" size={8} />
-                                    ) : (
-                                        <>
-                                            <FaPlus className="mr-2" />
-                                            Adicionar
-                                        </>
-                                    )}
+                            {error && <p className="text-red-500 text-sm mt-3">{error}</p>}
+                            <div className="flex flex-col sm:flex-row justify-end gap-2 mt-6">
+                                <button onClick={() => { setShowAddModal(false); setFormData({ nome: '', email: '', senha: '' }); setError(null); }}
+                                    className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm transition-colors">Cancelar</button>
+                                <button onClick={handleAddAdmin} disabled={loading}
+                                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 text-sm transition-colors disabled:opacity-50">
+                                    {loading ? <SyncLoader color="#fff" size={8} /> : <><FaPlus /> Criar Admin</>}
                                 </button>
                             </div>
                         </div>
@@ -545,40 +586,59 @@ const GerenciamentoAdmins = () => {
                 </div>
             )}
 
-            {/* Modal de Confirmar Exclusão */}
+            {/* ── Modal: Confirmar Suspensão ── */}
             {showDeleteModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
                         <div className="p-6">
-                            <h3 className="text-lg font-semibold mb-4 text-navy-700">
-                                Confirmar Exclusão
-                            </h3>
-                            <p className="mb-6 text-gray-600">
-                                Tem certeza que deseja remover este administrador?
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <FaUserSlash className="text-red-600" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-semibold text-navy-700">Confirmar Suspensão</h3>
+                                    <p className="text-xs text-gray-500">Pode ser revertido na tabela de suspensos</p>
+                                </div>
+                            </div>
+                            <p className="text-gray-600 text-sm mb-6">
+                                Tem a certeza que deseja <strong>suspender</strong> este administrador? Ele perderá o acesso imediatamente.
                             </p>
-                            <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
-                                <button
-                                    onClick={() => {
-                                        setShowDeleteModal(false);
-                                        setAdminToDelete(null);
-                                    }}
-                                    className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100 transition-colors"
-                                >
-                                    Cancelar
+                            <div className="flex flex-col sm:flex-row justify-end gap-2">
+                                <button onClick={() => { setShowDeleteModal(false); setAdminToDelete(null); }}
+                                    className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm transition-colors">Cancelar</button>
+                                <button onClick={handleDeleteAdmin} disabled={loading}
+                                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center justify-center gap-2 text-sm transition-colors disabled:opacity-50">
+                                    {loading ? <SyncLoader color="#fff" size={8} /> : <><FaUserSlash /> Suspender</>}
                                 </button>
-                                <button
-                                    onClick={handleDeleteAdmin}
-                                    disabled={loading}
-                                    className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 flex items-center justify-center transition-colors disabled:opacity-50"
-                                >
-                                    {loading ? (
-                                        <SyncLoader color="#ffffff" size={8} />
-                                    ) : (
-                                        <>
-                                            <FaTrash className="mr-2" />
-                                            Remover
-                                        </>
-                                    )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Modal: Confirmar Reativação ── */}
+            {showReactivateModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+                        <div className="p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <FaUserCheck className="text-green-600" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-semibold text-navy-700">Confirmar Reativação</h3>
+                                    <p className="text-xs text-gray-500">O administrador voltará a ter acesso ao painel</p>
+                                </div>
+                            </div>
+                            <p className="text-gray-600 text-sm mb-6">
+                                Tem a certeza que deseja <strong>reativar</strong> este administrador?
+                            </p>
+                            <div className="flex flex-col sm:flex-row justify-end gap-2">
+                                <button onClick={() => { setShowReactivateModal(false); setAdminToReactivate(null); }}
+                                    className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm transition-colors">Cancelar</button>
+                                <button onClick={handleReactivateAdmin} disabled={loading}
+                                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 text-sm transition-colors disabled:opacity-50">
+                                    {loading ? <SyncLoader color="#fff" size={8} /> : <><FaUserCheck /> Reativar</>}
                                 </button>
                             </div>
                         </div>

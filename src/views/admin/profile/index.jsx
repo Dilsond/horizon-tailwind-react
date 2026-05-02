@@ -215,7 +215,7 @@ const ProfileOverview = () => {
               <div className="absolute -bottom-12 flex h-[87px] w-[87px] items-center justify-center rounded-full border-[4px] border-white bg-pink-400 dark:!border-navy-700 group">
                 <img
                   className="h-full w-full rounded-full object-cover"
-                  src={adminData?.avatar_url || avatar}
+                  src={adminData?.avatar_url || banner}
                   alt={adminData?.nome || "Avatar"}
                 />
 
@@ -272,7 +272,7 @@ const ProfileOverview = () => {
               {/* Botão de alterar senha */}
               <button
                 onClick={() => setShowPasswordModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-navy-400 text-white rounded-lg hover:bg-navy-600 transition-colors"
               >
                 <MdLock className="w-5 h-5" />
                 Alterar Senha
