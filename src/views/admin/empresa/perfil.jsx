@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FaEdit, FaTrash, FaCheck, FaTimes, FaHeart, FaCalendarAlt, FaMapMarkerAlt, FaClock, FaSave, FaBan } from 'react-icons/fa';
+import { FaEdit, FaTrash, FaCheck, FaTimes, FaHeart, FaCalendarAlt, FaMapMarkerAlt, FaClock, FaSave, FaBan, FaBuilding, FaPhone, FaEnvelope, FaMapPin } from 'react-icons/fa';
 import { useParams, useNavigate } from 'react-router-dom';
 import Card from 'components/card';
 import avatar from "assets/img/avatars/avatar11.png";
@@ -162,10 +162,8 @@ const PerfilEmpresa = () => {
             if (error) throw error;
 
             setOrganizador({ ...organizador, ...updateData });
-            // alert(`Conta da empresa ${suspender ? 'suspensa' : 'ativada'} com sucesso.`);
         } catch (error) {
             console.error('Erro ao alterar status:', error);
-            // alert('Erro ao alterar status da conta');
         }
     };
 
@@ -277,6 +275,7 @@ const PerfilEmpresa = () => {
                 ← Voltar
             </button>
 
+            {/* Linha de cards superiores */}
             <div className="mb-6 grid h-full grid-cols-1 gap-5 md:grid-cols-2">
                 {/* Card de Perfil */}
                 <Card extra={"items-center w-full h-full p-[16px] bg-cover"}>
@@ -322,230 +321,187 @@ const PerfilEmpresa = () => {
                     </div>
                 </Card>
 
-                {/* Card de Ações Rápidas */}
+                {/* Card de Informações Cadastrais */}
                 <Card extra="w-full h-full p-6">
-                    <h3 className="text-lg font-bold text-navy-700 dark:text-white mb-4">
-                        Ações Rápidas
-                    </h3>
-                    <div className="space-y-3">
-                        <button
-                            onClick={() => setEditing(!editing)}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                        >
-                            <FaEdit />
-                            {editing ? 'Cancelar Edição' : 'Editar Perfil'}
-                        </button>
-                        
-                        {isContaAtiva ? (
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-bold text-navy-700 dark:text-white">
+                            Informações Cadastrais
+                        </h3>
+                        {editing ? (
                             <button
-                                onClick={() => handleStatusConta(true)}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+                                onClick={handleSalvarEdicao}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm"
                             >
-                                <FaBan />
-                                Suspender Conta
+                                <FaSave />
+                                Salvar
                             </button>
                         ) : (
                             <button
-                                onClick={() => handleStatusConta(false)}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                                onClick={() => setEditing(true)}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
                             >
-                                <FaCheck />
-                                Ativar Conta
+                                <FaEdit />
+                                Editar
                             </button>
                         )}
-                        
-                        <button
-                            onClick={deletarConta}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                        >
-                            <FaTrash />
-                            Excluir Permanentemente
-                        </button>
+                    </div>
+
+                    <div className="space-y-3">
+                        {/* Nome da Empresa */}
+                        <div className="flex items-start gap-3">
+                            <FaBuilding className="text-gray-400 mt-1 flex-shrink-0" />
+                            <div className="flex-1">
+                                <p className="text-xs text-gray-500">Nome da Empresa</p>
+                                {editing ? (
+                                    <input
+                                        type="text"
+                                        value={formData.nome_empresa}
+                                        onChange={(e) => setFormData({ ...formData, nome_empresa: e.target.value })}
+                                        className="w-full p-1.5 border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
+                                    />
+                                ) : (
+                                    <p className="text-sm font-medium text-gray-800">{formData.nome_empresa}</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* NIF */}
+                        <div className="flex items-start gap-3">
+                            <FaBuilding className="text-gray-400 mt-1 flex-shrink-0" />
+                            <div className="flex-1">
+                                <p className="text-xs text-gray-500">NIF</p>
+                                {editing ? (
+                                    <input
+                                        type="text"
+                                        value={formData.nif}
+                                        onChange={(e) => setFormData({ ...formData, nif: e.target.value })}
+                                        className="w-full p-1.5 border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
+                                    />
+                                ) : (
+                                    <p className="text-sm font-medium text-gray-800">{formData.nif || 'Não informado'}</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Email */}
+                        <div className="flex items-start gap-3">
+                            <FaEnvelope className="text-gray-400 mt-1 flex-shrink-0" />
+                            <div className="flex-1">
+                                <p className="text-xs text-gray-500">Email</p>
+                                <p className="text-sm font-medium text-gray-800">{formData.email_empresa}</p>
+                            </div>
+                        </div>
+
+                        {/* Contacto */}
+                        <div className="flex items-start gap-3">
+                            <FaPhone className="text-gray-400 mt-1 flex-shrink-0" />
+                            <div className="flex-1">
+                                <p className="text-xs text-gray-500">Contacto</p>
+                                {editing ? (
+                                    <input
+                                        type="text"
+                                        value={formData.contacto}
+                                        onChange={(e) => setFormData({ ...formData, contacto: e.target.value })}
+                                        className="w-full p-1.5 border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
+                                    />
+                                ) : (
+                                    <p className="text-sm font-medium text-gray-800">{formData.contacto || 'Não informado'}</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Localização */}
+                        <div className="flex items-start gap-3">
+                            <FaMapPin className="text-gray-400 mt-1 flex-shrink-0" />
+                            <div className="flex-1">
+                                <p className="text-xs text-gray-500">Localização</p>
+                                {editing ? (
+                                    <input
+                                        type="text"
+                                        value={formData.localizacao}
+                                        onChange={(e) => setFormData({ ...formData, localizacao: e.target.value })}
+                                        className="w-full p-1.5 border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
+                                    />
+                                ) : (
+                                    <p className="text-sm font-medium text-gray-800">{formData.localizacao || 'Não informado'}</p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Tags */}
+                        <div className="flex items-start gap-3">
+                            <FaBuilding className="text-gray-400 mt-1 flex-shrink-0" />
+                            <div className="flex-1">
+                                <p className="text-xs text-gray-500">Tags</p>
+                                {editing ? (
+                                    <div>
+                                        <input
+                                            type="text"
+                                            placeholder="Digite uma tag e pressione Enter"
+                                            onKeyDown={handleTagInput}
+                                            className="w-full p-1.5 border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent text-sm"
+                                        />
+                                        <div className="flex flex-wrap gap-1 mt-2">
+                                            {formData.tags.map((tag, index) => (
+                                                <span
+                                                    key={index}
+                                                    className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium flex items-center gap-1"
+                                                >
+                                                    {tag}
+                                                    <button
+                                                        onClick={() => removeTag(tag)}
+                                                        className="hover:text-red-600"
+                                                    >
+                                                        <FaTimes size={8} />
+                                                    </button>
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-wrap gap-1">
+                                        {formData.tags.length > 0 ? (
+                                            formData.tags.map((tag, index) => (
+                                                <span
+                                                    key={index}
+                                                    className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-medium"
+                                                >
+                                                    {tag}
+                                                </span>
+                                            ))
+                                        ) : (
+                                            <p className="text-sm text-gray-500">Nenhuma tag cadastrada</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 </Card>
             </div>
 
-            {/* Informações Cadastrais - Lado a Lado */}
+            {/* Card Sobre a Empresa */}
             <Card extra="w-full p-6 mb-6">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold text-navy-700 dark:text-white">
-                        Informações Cadastrais
-                    </h3>
-                    {editing && (
-                        <button
-                            onClick={handleSalvarEdicao}
-                            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-                        >
-                            <FaSave />
-                            Salvar Alterações
-                        </button>
-                    )}
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Coluna Esquerda */}
-                    <div className="space-y-4">
-                        {/* Nome da Empresa */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">
-                                Nome da Empresa
-                            </label>
-                            {editing ? (
-                                <input
-                                    type="text"
-                                    value={formData.nome_empresa}
-                                    onChange={(e) => setFormData({ ...formData, nome_empresa: e.target.value })}
-                                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-                                />
-                            ) : (
-                                <p className="text-base font-medium text-navy-700 dark:text-white">
-                                    {formData.nome_empresa}
-                                </p>
-                            )}
-                        </div>
-
-                        {/* NIF */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">
-                                NIF
-                            </label>
-                            {editing ? (
-                                <input
-                                    type="text"
-                                    value={formData.nif}
-                                    onChange={(e) => setFormData({ ...formData, nif: e.target.value })}
-                                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-                                />
-                            ) : (
-                                <p className="text-base font-medium text-navy-700 dark:text-white">
-                                    {formData.nif || 'Não informado'}
-                                </p>
-                            )}
-                        </div>
-
-                        {/* Localização */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">
-                                Localização
-                            </label>
-                            {editing ? (
-                                <input
-                                    type="text"
-                                    value={formData.localizacao}
-                                    onChange={(e) => setFormData({ ...formData, localizacao: e.target.value })}
-                                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-                                />
-                            ) : (
-                                <p className="text-base font-medium text-navy-700 dark:text-white">
-                                    {formData.localizacao || 'Não informado'}
-                                </p>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Coluna Direita */}
-                    <div className="space-y-4">
-                        {/* Contacto */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">
-                                Contacto
-                            </label>
-                            {editing ? (
-                                <input
-                                    type="text"
-                                    value={formData.contacto}
-                                    onChange={(e) => setFormData({ ...formData, contacto: e.target.value })}
-                                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-                                />
-                            ) : (
-                                <p className="text-base font-medium text-navy-700 dark:text-white">
-                                    {formData.contacto || 'Não informado'}
-                                </p>
-                            )}
-                        </div>
-
-                        {/* Email */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">
-                                Email
-                            </label>
-                            <p className="text-base font-medium text-navy-700 dark:text-white">
-                                {formData.email_empresa}
-                            </p>
-                        </div>
-
-                        {/* Tags */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">
-                                Tags
-                            </label>
-                            {editing ? (
-                                <div>
-                                    <input
-                                        type="text"
-                                        placeholder="Digite uma tag e pressione Enter"
-                                        onKeyDown={handleTagInput}
-                                        className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent mb-2"
-                                    />
-                                    <div className="flex flex-wrap gap-2 mt-2">
-                                        {formData.tags.map((tag, index) => (
-                                            <span
-                                                key={index}
-                                                className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium flex items-center gap-1"
-                                            >
-                                                {tag}
-                                                <button
-                                                    onClick={() => removeTag(tag)}
-                                                    className="hover:text-red-600"
-                                                >
-                                                    <FaTimes size={10} />
-                                                </button>
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="flex flex-wrap gap-2">
-                                    {formData.tags.length > 0 ? (
-                                        formData.tags.map((tag, index) => (
-                                            <span
-                                                key={index}
-                                                className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium"
-                                            >
-                                                {tag}
-                                            </span>
-                                        ))
-                                    ) : (
-                                        <p className="text-sm text-gray-500">Nenhuma tag cadastrada</p>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Sobre - Ocupa largura total */}
-                <div className="mt-6">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">
-                        Sobre a Empresa
-                    </label>
-                    {editing ? (
-                        <textarea
-                            value={formData.sobre}
-                            onChange={(e) => setFormData({ ...formData, sobre: e.target.value })}
-                            rows={4}
-                            className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-                        />
-                    ) : (
-                        <p className="text-base text-gray-600">
-                            {formData.sobre || 'Sem descrição cadastrada'}
-                        </p>
-                    )}
-                </div>
+                <h3 className="text-lg font-bold text-navy-700 dark:text-white mb-4">
+                    Sobre a Empresa
+                </h3>
+                {editing ? (
+                    <textarea
+                        value={formData.sobre}
+                        onChange={(e) => setFormData({ ...formData, sobre: e.target.value })}
+                        rows={4}
+                        className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                        placeholder="Descrição da empresa..."
+                    />
+                ) : (
+                    <p className="text-base text-gray-600">
+                        {formData.sobre || 'Sem descrição cadastrada'}
+                    </p>
+                )}
             </Card>
 
             {/* Eventos Divulgados */}
-            <Card extra="w-full p-6">
+            <Card extra="w-full p-6 mb-6">
                 <h3 className="text-lg font-bold text-navy-700 dark:text-white mb-4">
                     Eventos Divulgados ({eventos.length})
                 </h3>
@@ -624,6 +580,36 @@ const PerfilEmpresa = () => {
                         ))}
                     </div>
                 )}
+            </Card>
+
+            {/* Card de Ações da Conta (Suspender/Ativar/Excluir) */}
+            <Card extra="w-full p-6">
+                <h3 className="text-lg font-bold text-navy-700 dark:text-white mb-4">
+                    Gerenciamento da Conta
+                </h3>
+                <div className="grid grid-cols-1 gap-4">
+                    {isContaAtiva ? (
+                        <button
+                            onClick={() => handleStatusConta(true)}
+                            className="flex w-[300px] items-center justify-center gap-2 px-4 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+                        >
+                            <FaBan />
+                            Suspender Conta
+                        </button>
+                    ) : (
+                        <button
+                            onClick={() => handleStatusConta(false)}
+                            className="flex w-[300px] items-center justify-center gap-2 px-4 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                        >
+                            <FaCheck />
+                            Ativar Conta
+                        </button>
+                    )}
+                </div>
+                <p className="text-xs text-gray-500 mt-4 text-center">
+                    Ao suspender a conta, o organizador não poderá acessar a plataforma até que seja reativado.
+                    A exclusão é permanente e não pode ser desfeita.
+                </p>
             </Card>
         </div>
     );

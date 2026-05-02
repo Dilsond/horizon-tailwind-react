@@ -17,8 +17,9 @@ import GerenciamentoUsuarios from "views/admin/usuario";
 import GerenciamentoEmpresas from "views/admin/empresa";
 import PerfilEmpresa from "views/admin/empresa/perfil.jsx";
 import SignIn from "views/auth/SignIn";
-// import GerenciamentoAdmins from "views/admin/admins";
-// import UsuariosLogados from "views/admin/usuario/usuarios_logados";
+import EmpresasParaAprovar from "views/admin/empresa/aprovacao.jsx";
+import UsuariosLogados from "views/admin/usuario/usuarios_logados";
+import GerenciamentoAdmins from "views/admin/admins";
 
 // Icon Imports
 import {
@@ -27,6 +28,7 @@ import {
   MdPerson,
   MdArchive,
   MdLock,
+  MdOutlinePendingActions,
 } from "react-icons/md";
 import { FaHeadset, FaShieldAlt,  FaCog, FaUsers, FaBullhorn, FaExclamationTriangle, FaAccusoft, FaTable, FaKey, FaFingerprint } from 'react-icons/fa';
 import DetalhesEvento from "views/admin/detalhes";
@@ -72,6 +74,14 @@ const routes = [
     admin: true,
     icon: <FaAccusoft className="h-6 w-6" />,
     component: <GerenciamentoEmpresas />,
+  },
+  {
+    name: "Organizadores Por Aprovar",
+    layout: "/admin",
+    admin: true,
+    path: "aprovacao",
+    icon: <MdOutlinePendingActions className="h-6 w-6" />,
+    component: <EmpresasParaAprovar />,
   },
   {
     name: "Tabelas",
@@ -177,14 +187,14 @@ const routes = [
   //   icon: <FaFingerprint className="h-6 w-6" />,
   //   component: <UsuariosLogados />,
   // },
-  // {
-  //   name: "Admins",
-  //   layout: "/admin",
-  //   icon: <FaKey className="inline-block h-5 w-5" />,
-  //   path: "admins",
-  //   admin: true,
-  //   component: <GerenciamentoAdmins />,
-  // },
+  {
+    name: "Admins",
+    layout: "/admin",
+    icon: <FaKey className="inline-block h-5 w-5" />,
+    path: "admins",
+    admin: true,
+    component: <GerenciamentoAdmins />,
+  },
   
 ];
 export default routes;

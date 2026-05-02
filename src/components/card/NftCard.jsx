@@ -20,7 +20,6 @@ const EventList = () => {
 
       console.log('🔍 Buscando todos os eventos...');
 
-      // Removido o filtro .is('deleted_at', null) para buscar TODOS os eventos
       const { data: eventos, error: eventosError } = await supabase
         .from('eventos')
         .select('*')
@@ -31,7 +30,7 @@ const EventList = () => {
         throw eventosError;
       }
 
-      console.log('📦 Eventos encontrados (incluindo deletados):', eventos?.length || 0);
+      console.log('📦 Eventos encontrados:', eventos?.length || 0);
 
       if (!eventos || eventos.length === 0) {
         setEvents([]);
@@ -41,9 +40,10 @@ const EventList = () => {
       const eventosCompletos = await Promise.all(
         eventos.map(async (evento) => {
           try {
+            // Buscar organizador com avatar
             const { data: organizador, error: orgError } = await supabase
               .from('organizadores')
-              .select('nome_empresa')
+              .select('nome_empresa, avatar_url, status')
               .eq('id', evento.organizador_id)
               .maybeSingle();
 
@@ -60,11 +60,20 @@ const EventList = () => {
               console.error(`⚠️ Erro ao buscar likes para evento ${evento.id}:`, likesError);
             }
 
+            // Verificar se o evento é gratuito
+            const isFree = !evento.valor || evento.valor === 0;
+            const priceDisplay = isFree ? 'Grátis' : `${evento.valor?.toLocaleString()} Kz`;
+            const isFreeNumber = evento.valor === 0 || evento.valor === null;
+
             return {
               id: evento.id,
               title: evento.nome_evento || 'Sem título',
               author: organizador?.nome_empresa || 'Organizador',
-              price: evento.valor?.toString() || "0",
+              authorAvatar: organizador?.avatar_url || null,
+              authorStatus: organizador?.status || 'aprovado',
+              price: evento.valor || 0,
+              priceDisplay: priceDisplay,
+              isFree: isFreeNumber,
               image: evento.imagem_url || 'https://via.placeholder.com/300x200?text=Sem+Imagem',
               likes: likesCount || 0,
               category: evento.categoria || 'Sem categoria',
@@ -72,7 +81,7 @@ const EventList = () => {
               location: evento.local || 'Local não informado',
               date: evento.data_evento,
               time: evento.hora_evento,
-              deleted_at: evento.deleted_at // Incluir informação de deleção
+              deleted_at: evento.deleted_at
             };
           } catch (err) {
             console.error(`❌ Erro ao processar evento ${evento.id}:`, err);
@@ -97,9 +106,9 @@ const EventList = () => {
   const toggleEventStatus = async (eventId, currentDeletedAt) => {
     try {
       setUpdatingEvent(eventId);
-      
+
       const newDeletedAt = currentDeletedAt ? null : new Date().toISOString();
-      
+
       const { error } = await supabase
         .from('eventos')
         .update({ deleted_at: newDeletedAt })
@@ -107,7 +116,6 @@ const EventList = () => {
 
       if (error) throw error;
 
-      // Atualizar a lista local
       setEvents(prevEvents =>
         prevEvents.map(event =>
           event.id === eventId
@@ -124,7 +132,7 @@ const EventList = () => {
     }
   };
 
-  // Renderização condicional com apenas um return
+  // Renderização condicional
   let content;
 
   if (loading) {
@@ -142,24 +150,24 @@ const EventList = () => {
   } else if (events.length === 0) {
     content = (
       <div className="text-center text-gray-500 p-8">
-        Nenhum evento encontrado 
+        Nenhum evento encontrado
       </div>
     );
   } else {
     content = (
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 3xl:grid-cols-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {events.map((event) => {
           const isDeleted = event.deleted_at !== null;
-          
+
           return (
             <Card
               key={event.id}
-              extra={`flex flex-col w-full h-full !p-4 3xl:p-![18px] bg-white mb-5 ${
-                isDeleted ? 'opacity-60' : ''
-              }`}
+              extra={`flex flex-col w-full h-[520px] !p-4 bg-white hover:shadow-lg transition-shadow duration-300 ${isDeleted ? 'opacity-60' : ''
+                }`}
             >
-              <div className="h-full w-full">
-                <div className="relative w-full">
+              <div className="h-full w-full flex flex-col">
+                {/* Imagem do Evento */}
+                <div className="relative w-full h-48 flex-shrink-0">
                   {isDeleted && (
                     <div className="absolute top-2 right-2 z-10">
                       <span className="bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold">
@@ -170,51 +178,77 @@ const EventList = () => {
                   <img
                     src={event.image}
                     alt={event.title}
-                    className="mb-3 h-full w-full rounded-xl 3xl:h-full 3xl:w-full cursor-pointer"
+                    className="w-full h-full object-cover rounded-xl cursor-pointer"
                     onClick={() => navigate(`/admin/detalhes/${event.id}`)}
+                    onError={(e) => {
+                      e.target.src = 'https://via.placeholder.com/300x200?text=Imagem+Indispon%C3%ADvel';
+                    }}
                   />
                 </div>
 
-                <div className="mb-3 flex items-center justify-between px-1 md:flex-col md:items-start lg:flex-row lg:justify-between xl:flex-col xl:items-start 3xl:flex-row 3xl:justify-between">
-                  <div className="mb-2">
-                    <div className="flex gap-2 items-center">
+                {/* Conteúdo */}
+                <div className="flex-1 flex flex-col mt-3">
+                  {/* Autor com Avatar */}
+                  <div className="flex items-center gap-2 mb-2">
+                    {event.authorAvatar ? (
                       <img
-                        src={event.image}
-                        className="w-10 h-10 rounded-full"
-                        alt=""
+                        src={event.authorAvatar}
+                        alt={event.author}
+                        className="w-8 h-8 rounded-full object-cover"
+                        onError={(e) => {
+                          e.target.src = `https://ui-avatars.com/api/?background=f97316&color=fff&bold=true&size=32&name=${encodeURIComponent(event.author)}`;
+                        }}
                       />
-                      <p className="text-lg font-bold text-navy-700 dark:text-white">
-                        {event.author}
-                      </p>
-                    </div>
-                    <p className="mt-2 text-sm font-medium text-gray-600 md:mt-2">
-                      Nome: {event.title}
-                    </p>
-                    <p className="mt-2 text-sm font-medium text-gray-600 md:mt-2">
-                      Interessados: {event.price}
-                    </p>
-                    <p className="mt-2 text-sm font-medium text-gray-600 md:mt-2">
-                      Status: {isDeleted ? 'Deletado' : 'Disponível'}
-                    </p>
-                    <p className="mt-2 mb-2 text-sm font-bold text-brand-500 dark:text-white">
-                      Preço {event.price} <span>Kzs</span>
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-navy-500 to-red-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                        {event.author.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <p className="text-sm font-semibold text-gray-700 truncate">
+                      {event.author}
                     </p>
                   </div>
-                </div>
 
-                <div className="flex items-center justify-between md:flex-col md:items-start lg:flex-row lg:justify-between xl:flex-col 2xl:items-start 3xl:flex-row 3xl:items-center 3xl:justify-between">
-                  <div className="flex flex-row items-center gap-x-2">
+                  {/* Título do evento */}
+                  <h3 className="text-base font-bold text-gray-900 mb-2 line-clamp-2 min-h-[48px]">
+                    {event.title}
+                  </h3>
+
+                  {/* Informações adicionais */}
+                  <div className="space-y-1 mb-3">
+                    <p className="text-sm text-gray-600 flex items-center gap-1">
+                      <span className="font-medium">Categoria:</span>
+                      {event.category}
+                    </p>
+                    <p className="text-sm text-gray-600 flex items-center gap-1">
+                      <span className="font-medium">Data:</span>
+                      {event.date ? new Date(event.date).toLocaleDateString('pt-PT') : 'N/A'}
+                    </p>
+                    <p className="text-sm text-gray-600 flex items-center gap-1">
+                      <span className="font-medium">Status:</span>
+                      <span className={isDeleted ? 'text-red-600 font-semibold' : 'text-green-600 font-semibold'}>
+                        {isDeleted ? 'Deletado' : 'Ativo'}
+                      </span>
+                    </p>
+                  </div>
+
+                  {/* Preço */}
+                  <div className="mt-auto">
+                    <p className={`text-xl font-bold mb-3 ${event.isFree ? 'text-green-600' : 'text-green-600'}`}>
+                      {event.priceDisplay}
+                    </p>
+
+                    {/* Botão */}
                     <button
                       onClick={() => toggleEventStatus(event.id, event.deleted_at)}
                       disabled={updatingEvent === event.id}
-                      className={`linear rounded-[20px] px-4 py-2 text-base font-medium text-white transition duration-200 ${
-                        isDeleted
-                          ? 'bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600'
-                          : 'bg-red-600 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600'
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      className={`w-full linear rounded-[20px] px-4 py-2 text-sm font-medium text-white transition duration-200 ${isDeleted
+                          ? 'bg-green-600 hover:bg-green-700'
+                          : 'bg-red-600 hover:bg-red-700'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
                       {updatingEvent === event.id ? (
-                        <span className="flex items-center gap-2">
+                        <span className="flex items-center justify-center gap-2">
                           <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -222,7 +256,7 @@ const EventList = () => {
                           Processando...
                         </span>
                       ) : (
-                        isDeleted ? 'Ativar' : 'Desativar'
+                        isDeleted ? 'Ativar Evento' : 'Desativar Evento'
                       )}
                     </button>
                   </div>
