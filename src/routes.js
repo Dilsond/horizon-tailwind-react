@@ -18,6 +18,7 @@ import GerenciamentoEmpresas from "views/admin/empresa";
 import PerfilEmpresa from "views/admin/empresa/perfil.jsx";
 import SignIn from "views/auth/SignIn";
 import EmpresasParaAprovar from "views/admin/empresa/aprovacao.jsx";
+import EventosPendentes from "views/admin/eventos";
 import UsuariosLogados from "views/admin/usuario/usuarios_logados";
 import GerenciamentoAdmins from "views/admin/admins";
 
@@ -82,6 +83,14 @@ const routes = [
     path: "aprovacao",
     icon: <MdOutlinePendingActions className="h-6 w-6" />,
     component: <EmpresasParaAprovar />,
+  },
+  {
+    name: "Eventos Pendentes",
+    layout: "/admin",
+    admin: true,
+    path: "pendentes",
+    icon: <MdOutlinePendingActions className="h-6 w-6" />,
+    component: <EventosPendentes />,
   },
   {
     name: "Tabelas",
